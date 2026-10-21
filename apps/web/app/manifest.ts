@@ -1,0 +1,2 @@
+import type {MetadataRoute} from 'next';
+export default function manifest():MetadataRoute.Manifest{return {name:'Mimiz Kitchen',short_name:'Mimiz',description:'Your Ghanaian favourites, made with love.',start_url:'/',display:'standalone',background_color:'#fcfaf6',theme_color:'#283027',icons:[{src:'/icons/icon-192.png',sizes:'192x192',type:'image/png',purpose:'any'},{src:'/icons/icon-512.png',sizes:'512x512',type:'image/png',purpose:'maskable'}]};}

@@ -1,0 +1,2 @@
+import { defineConfig } from '@playwright/test';
+export default defineConfig({testDir:'./tests/e2e',timeout:120000,expect:{timeout:20000},workers:1,use:{baseURL:'http://localhost:3002',trace:'retain-on-failure'},projects:[{name:'mobile',use:{viewport:{width:360,height:800},isMobile:true,hasTouch:true}},{name:'desktop',use:{viewport:{width:1280,height:900}}}],reporter:'list',outputDir:'artifacts/test-results'});

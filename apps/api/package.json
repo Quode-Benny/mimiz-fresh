@@ -1,0 +1,42 @@
+{
+  "name": "@mimiz/api",
+  "private": true,
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@fastify/cookie": "11.0.2",
+    "@fastify/helmet": "13.0.2",
+    "@fastify/static": "8.3.0",
+    "@mimiz/domain": "workspace:*",
+    "@mimiz/providers": "workspace:*",
+    "@mimiz/shared": "workspace:*",
+    "@nestjs/common": "11.1.6",
+    "@nestjs/core": "11.1.6",
+    "@nestjs/platform-fastify": "11.1.6",
+    "@nestjs/platform-socket.io": "11.1.6",
+    "@nestjs/swagger": "11.2.1",
+    "@nestjs/websockets": "11.1.6",
+    "argon2": "0.44.0",
+    "bullmq": "5.61.2",
+    "drizzle-orm": "0.44.7",
+    "fastify": "5.6.1",
+    "ioredis": "5.8.1",
+    "jose": "6.1.0",
+    "pg": "8.16.3",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "sharp": "0.34.4",
+    "socket.io": "4.8.1",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.0",
+    "@types/pg": "8.15.5",
+    "tsup": "8.5.0",
+    "tsx": "4.20.6"
+  }
+}

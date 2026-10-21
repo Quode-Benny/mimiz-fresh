@@ -1,0 +1,27 @@
+import {test,expect} from '@playwright/test';
+import {randomInt} from 'node:crypto';
+test.setTimeout(90000);
+test('customer can sign in and place a pickup order from the storefront',async({page},info)=>{
+ const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
+ await page.goto('/');
+ await page.getByRole('button',{name:'Add Smoky Ghana jollof to bag',exact:true}).click();
+ await page.getByRole('dialog').getByRole('button',{name:/Add to bag/}).click();
+ await page.locator('header').getByRole('button',{name:'Open bag, 1 items'}).click();
+ await page.getByRole('link',{name:'Continue to checkout'}).click();
+ await page.getByRole('link',{name:'Sign in with your phone'}).click();
+ await page.getByLabel('Your name').fill('Browser customer');
+ await page.getByLabel('Phone number').fill('024'+String(randomInt(1000000,9999999)));
+ await page.getByRole('button',{name:'Send my code'}).click();
+ await page.getByLabel('Six-digit code').fill('123456');
+ await page.getByRole('button',{name:'Sign in',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'A good meal is almost yours.'})).toBeVisible();
+ await page.getByRole('button',{name:'Pickup',exact:true}).click();
+ await page.getByRole('button',{name:'Review order',exact:true}).click();
+ await page.getByRole('button',{name:/Place order/}).click();
+ await expect(page).toHaveURL(/\/orders\/[a-f0-9-]+$/);
+ await expect(page.locator('.status-badge').first()).toHaveText('placed');
+ await page.screenshot({path:'artifacts/screenshots/'+info.project.name+'-placed-order.png',fullPage:true});
+ await page.reload();
+ await expect(page.locator('.status-badge').first()).toHaveText('placed');
+ expect(errors).toEqual([]);
+});

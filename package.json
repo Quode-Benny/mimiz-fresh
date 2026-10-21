@@ -1,0 +1,23 @@
+{
+  "name": "mimiz-fresh",
+  "private": true,
+  "packageManager": "pnpm@10.18.3",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "playwright test",
+    "setup": "node scripts/setup.mjs",
+    "test:reset-limits": "node scripts/reset-test-limits.cjs",
+    "verify:api": "node scripts/verify-api-build.cjs",
+    "verify:pwa": "node scripts/verify-pwa.cjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
+    "@playwright/test": "1.56.1",
+    "turbo": "2.5.8",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

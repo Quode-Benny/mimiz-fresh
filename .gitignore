@@ -1,0 +1,15 @@
+node_modules/
+.next/
+dist/
+.turbo/
+.env
+.env.local
+*.tsbuildinfo
+
+artifacts/
+playwright-report/
+.local-admin
+
+data/
+apps/web/public/sw*
+apps/web/public/swe-worker*
