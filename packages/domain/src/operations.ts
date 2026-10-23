@@ -1,0 +1,25 @@
+import type {Daypart,MenuItem} from '@mimiz/shared';
+export type DaypartDefinition={id:Daypart;label:string;start:string;end:string};
+export const defaultDayparts:DaypartDefinition[]=[{id:'breakfast',label:'Breakfast',start:'05:00',end:'11:00'},{id:'lunch',label:'Lunch',start:'11:00',end:'15:00'},{id:'afternoon',label:'Afternoon',start:'15:00',end:'18:00'},{id:'dinner',label:'Dinner',start:'18:00',end:'22:00'},{id:'late_night',label:'Late night',start:'22:00',end:'05:00'}];
+export type HoursDay={open:string;close:string;closed:boolean;intervals?:{open:string;close:string}[]};
+type KitchenHours={hours:HoursDay[];closures?:string[]};
+const minutes=(time:string)=>Number(time.slice(0,2))*60+Number(time.slice(3,5));
+export function withinWindow(time:string,start:string,end:string){return start<end?time>=start&&time<end:start>end&&(time>=start||time<end);}
+export function isOpenAt(branch:KitchenHours,date:Date){if(!Number.isFinite(date.getTime()))return false;const day=date.getUTCDay(),today=date.toISOString().slice(0,10),previousDate=new Date(date.getTime()-86400000).toISOString().slice(0,10);if(branch.closures?.includes(today))return false;const time=date.getUTCHours()*60+date.getUTCMinutes(),current=branch.hours[day],previous=branch.hours[(day+6)%7];
+ const intervals=(day?:HoursDay)=>!day||day.closed?[]:day.intervals?.length?day.intervals:[day];
+ return intervals(current).some(window=>minutes(window.open)<minutes(window.close)?time>=minutes(window.open)&&time<minutes(window.close):minutes(window.open)>minutes(window.close)&&time>=minutes(window.open))||(!branch.closures?.includes(previousDate)&&intervals(previous).some(window=>minutes(window.open)>minutes(window.close)&&time<minutes(window.close)));
+}
+export function scheduleSlots(branch:KitchenHours,now=new Date()){const start=Math.ceil((now.getTime()+15*60000)/(15*60000))*15*60000,end=now.getTime()+3*86400000,result:string[]=[];for(let value=start;value<=end;value+=15*60000){const date=new Date(value);if(isOpenAt(branch,date))result.push(date.toISOString());}return result;}
+export function calculateOrderTotals(input:{subtotal:number;deliveryFee:number;discount:number;discountOnDelivery?:boolean;feeKind:'fixed'|'percent';feeValue:number;taxBps:number;taxDelivery:boolean}){
+ for(const value of [input.subtotal,input.deliveryFee,input.discount,input.feeValue,input.taxBps])if(!Number.isSafeInteger(value)||value<0)throw new RangeError('Money and rates must be non-negative safe integers.');
+ if(input.taxBps>10000||input.feeKind==='percent'&&input.feeValue>10000||input.discount>(input.discountOnDelivery?input.deliveryFee:input.subtotal))throw new RangeError('Invalid discount or percentage.');
+ const proportional=(amount:number,bps:number)=>{const result=Number((BigInt(amount)*BigInt(bps)+5000n)/10000n);if(!Number.isSafeInteger(result))throw new RangeError('Order total is too large.');return result;};
+ const netFood=input.subtotal-(input.discountOnDelivery?0:input.discount),netDelivery=input.deliveryFee-(input.discountOnDelivery?input.discount:0),serviceFee=input.feeKind==='fixed'?input.feeValue:proportional(netFood,input.feeValue),base=netFood+serviceFee+(input.taxDelivery?netDelivery:0);
+ if(!Number.isSafeInteger(base))throw new RangeError('Order total is too large.');const tax=proportional(base,input.taxBps),total=netFood+netDelivery+serviceFee+tax;if(!Number.isSafeInteger(total))throw new RangeError('Order total is too large.');return {serviceFee,tax,total};
+}
+function distance(a:string,b:string){const rows=Array.from({length:a.length+1},()=>Array<number>(b.length+1).fill(0));for(let i=0;i<=a.length;i++)rows[i]![0]=i;for(let j=0;j<=b.length;j++)rows[0]![j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++){rows[i]![j]=Math.min(rows[i-1]![j]!+1,rows[i]![j-1]!+1,rows[i-1]![j-1]!+(a[i-1]===b[j-1]?0:1));if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1])rows[i]![j]=Math.min(rows[i]![j]!,rows[i-2]![j-2]!+1);}return rows[a.length]![b.length]!;}
+const normalise=(value:string)=>value.toLocaleLowerCase('en-GH').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+export function menuSearchScore(item:Pick<MenuItem,'name'|'description'|'category'|'tags'>,query:string):number|null{
+ const terms:string[]=normalise(query).match(/[\p{L}\p{N}]+/gu)||[];if(!terms.length)return 0;const name=normalise(item.name),extra=normalise(item.description+' '+item.category+' '+(item.tags||[]).join(' ')),nameWords:string[]=name.match(/[\p{L}\p{N}]+/gu)||[],words:string[]=(name+' '+extra).match(/[\p{L}\p{N}]+/gu)||[];let score=0;
+ for(const term of terms){if(nameWords.includes(term))continue;if(nameWords.some(word=>word.startsWith(term))){score+=1;continue;}if(name.includes(term)){score+=2;continue;}if(extra.includes(term)){score+=4;continue;}const limit=term.length>=8?2:term.length>=4?1:0;const closest=limit?Math.min(...words.filter(word=>word.length<=40&&Math.abs(word.length-term.length)<=limit).map(word=>distance(term.slice(0,40),word))):Infinity;if(closest>limit)return null;score+=6+closest;}return score;
+}

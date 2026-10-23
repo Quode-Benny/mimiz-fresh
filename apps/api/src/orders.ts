@@ -7,6 +7,7 @@ import { Database } from './database/database';
 import { CatalogueRepository } from './catalogue';
 import { config } from './config';
 import { hash, fail, branchAllowed, type Actor } from './security';
+import {calculateOrderTotals} from '@mimiz/domain';
 import { checkHours, transitionAllowed } from './order-rules';
 export const addressSchema=z.object({
  latitude:z.number().min(-90).max(90),longitude:z.number().min(-180).max(180),
@@ -15,15 +16,21 @@ export const addressSchema=z.object({
  recipientName:z.string().trim().min(2).max(100),recipientPhone:z.string().regex(/^\+233\d{9}$/),
 });
 export const checkoutSchema=z.object({cartId:z.string().uuid(),cartVersion:z.number().int(),paymentMethod:z.enum(['cash','online']),address:addressSchema.optional(),scheduledFor:z.iso.datetime().optional(),note:z.string().trim().max(600).default('')});
+import type {NotificationsService} from './notifications';
 export class OrdersService {
- constructor(private db:Database,private catalogue:CatalogueRepository,readonly gateway:PaymentProvider,private queue:Queue,private signal:(order:any)=>void){}
+ constructor(private db:Database,private catalogue:CatalogueRepository,readonly gateway:PaymentProvider,private queue:Queue,private signal:(order:any)=>void,private notifications:NotificationsService){}
  async quote(tx:PoolClient,cart:any,input:z.infer<typeof checkoutSchema>,actor:Actor){
   const branch=(await tx.query('SELECT * FROM branches WHERE id=$1 FOR UPDATE',[cart.branch_id])).rows[0];
-  if(!branch?.accepting)fail(409,'This kitchen is not accepting orders right now.');
+  if(!branch?.accepting||!branch.active)fail(409,'This kitchen is not accepting orders right now.');
   if((cart.fulfillment==='delivery'&&!branch.supports_delivery)||(cart.fulfillment==='pickup'&&!branch.supports_pickup))fail(409,'This fulfilment method is unavailable.');
-  checkHours(branch,input.scheduledFor);
+  const company=(await tx.query('SELECT settings FROM companies WHERE id=$1 FOR SHARE',[branch.company_id])).rows[0].settings;
+  if(input.paymentMethod==='online'&&(!config.onlinePayments||!company.flags.onlinePayments))fail(400,'Online payment is not available right now.');
+  if(input.scheduledFor&&!company.flags.scheduling)fail(400,'Scheduled orders are not available right now.');
+  if(cart.promo_code&&!company.flags.promotions)fail(400,'Promotions are unavailable. Clear the code to continue.');
+  if(input.paymentMethod==='cash'&&!branch.supports_cash)fail(400,'Cash is unavailable at this kitchen.');
+  const at=checkHours(branch,input.scheduledFor);
   if(cart.selections.length===0)fail(400,'Your bag is empty.');
-  const priced=await this.catalogue.price(cart.branch_id,cart.selections,tx);
+  const priced=await this.catalogue.price(cart.branch_id,cart.selections,tx,false,at);
   let fee=0;let deliveryMinutes=0;let zone=null;
   if(cart.fulfillment==='delivery'){
    if(!input.address)fail(400,'Choose a delivery pin and enter the address and landmark.');
@@ -44,20 +51,24 @@ export class OrdersService {
    discount=promotion.type==='free_delivery'?fee:promotion.type==='fixed'?promotion.value:Math.floor(priced.subtotal*promotion.value/100);
    discount=Math.min(discount,promotion.max_discount??discount,promotion.type==='free_delivery'?fee:priced.subtotal);
   }
-  return {...priced,branch,zone,deliveryFee:fee,deliveryMinutes,discount,total:priced.subtotal+fee-discount,promoId:promotion?.id??null};
+  const totals=calculateOrderTotals({subtotal:priced.subtotal,deliveryFee:fee,discount,discountOnDelivery:promotion?.type==='free_delivery',feeKind:company.serviceFee.kind,feeValue:company.serviceFee.value,taxBps:company.taxBps,taxDelivery:company.taxDelivery});
+  return {...priced,...totals,branch,zone,deliveryFee:fee,deliveryMinutes,discount,promoId:promotion?.id??null};
  }
- async preview(cart:any,body:unknown,actor:Actor){const input=checkoutSchema.parse(body);return this.db.transaction(async tx=>{const q=await this.quote(tx,cart,input,actor);return {subtotal:q.subtotal,deliveryFee:q.deliveryFee,serviceFee:0,tax:0,discount:q.discount,total:q.total,zone:q.zone?.name,onlineAvailable:config.onlinePayments,cashAvailable:q.branch.supports_cash,simulated:this.gateway.simulated};});}
- async create(cart:any,body:unknown,actor:Actor,idempotencyKey:string){
+ async preview(cart:any,body:unknown,actor:Actor){const input=checkoutSchema.parse(body);return this.db.transaction(async tx=>{const q=await this.quote(tx,cart,input,actor);return {subtotal:q.subtotal,deliveryFee:q.deliveryFee,serviceFee:q.serviceFee,tax:q.tax,discount:q.discount,total:q.total,zone:q.zone?.name,onlineAvailable:config.onlinePayments,cashAvailable:q.branch.supports_cash,simulated:this.gateway.simulated};});}
+ async create(cart:any,body:unknown,actor:Actor,idempotencyKey:string,initiator?:Actor){
+  if(initiator&&(!['super_admin','branch_manager','support_agent'].includes(initiator.role)||!branchAllowed(initiator,cart.branch_id)))fail(403,'Your role cannot create an order for this kitchen.');
   const input=checkoutSchema.parse(body);
   if(input.cartId!==cart.id)fail(403,'This bag does not belong to your account.');
   if(!/^[a-zA-Z0-9-]{16,100}$/.test(idempotencyKey))fail(400,'A valid idempotency key is required.');
   if(input.paymentMethod==='online'&&!config.onlinePayments)fail(400,'Online payment is disabled.');
-  const requestHash=hash(JSON.stringify(input));
+  const requestHash=hash(JSON.stringify(input)+(initiator?JSON.stringify({staffId:initiator.id,selections:cart.selections,branchId:cart.branch_id,fulfillment:cart.fulfillment,promoCode:cart.promo_code}):''));
   const order=await this.db.transaction(async tx=>{
    await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))',[actor.id]);
+   if(!(await tx.query('SELECT id FROM users WHERE id=$1 AND active FOR SHARE',[actor.id])).rowCount)fail(403,'This account is unavailable.');
+   if(initiator){const staff=(await tx.query('SELECT * FROM users WHERE id=$1 AND active FOR SHARE',[initiator.id])).rows[0];if(!staff||!['super_admin','branch_manager','support_agent'].includes(staff.role)||!branchAllowed(staff,cart.branch_id))fail(403,'Your staff access has changed.');}
    const prior=(await tx.query('SELECT * FROM orders WHERE idempotency_key=$1',[idempotencyKey])).rows[0];
    if(prior){if(prior.user_id!==actor.id||prior.request_hash!==requestHash)fail(409,'This checkout key was already used for another request.');return prior;}
-   const current=(await tx.query('SELECT * FROM carts WHERE id=$1 AND user_id=$2 FOR UPDATE',[cart.id,actor.id])).rows[0];
+   const current=initiator?cart:(await tx.query('SELECT * FROM carts WHERE id=$1 AND user_id=$2 FOR UPDATE',[cart.id,actor.id])).rows[0];
    if(!current||current.version!==input.cartVersion)fail(409,'Your bag changed. Review the current prices before placing the order.');
    const q=await this.quote(tx,current,input,actor);
    if(input.paymentMethod==='cash'&&!q.branch.supports_cash)fail(400,'Cash is unavailable at this kitchen.');
@@ -69,13 +80,14 @@ export class OrdersService {
    }
    const sequence=(await tx.query('INSERT INTO branch_day_counters(branch_id,order_day,last_seq) VALUES($1,CURRENT_DATE,1) ON CONFLICT(branch_id,order_day) DO UPDATE SET last_seq=branch_day_counters.last_seq+1 RETURNING last_seq',[current.branch_id])).rows[0].last_seq;
    const number=q.branch.code+'-'+new Date().toISOString().slice(2,10).replaceAll('-','')+'-'+String(sequence).padStart(4,'0');
-   const id=randomUUID();const readyAt=new Date((input.scheduledFor?new Date(input.scheduledFor).getTime():Date.now())+q.branch.prep_minutes*60000);
+   const id=randomUUID();const readyAt=new Date((input.scheduledFor?new Date(input.scheduledFor).getTime():Date.now())+(q.branch.prep_minutes+q.branch.extra_prep_minutes)*60000);
    const items=q.lines.map(line=>({itemId:line.itemId,name:line.item.name,image:line.item.image,quantity:line.quantity,unitPricePesewas:line.unitPricePesewas,options:line.options,note:line.note}));
    const status=input.paymentMethod==='online'?'pending_payment':'placed';
-   const created=(await tx.query('INSERT INTO orders(id,number,branch_id,user_id,fulfillment,status,payment_status,payment_method,items,subtotal,delivery_fee,discount,total,address,note,promo_id,scheduled_for,estimated_ready_at,estimated_delivery_at,idempotency_key,request_hash) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18,$19,$20,$21) RETURNING *',[id,number,current.branch_id,actor.id,current.fulfillment,status,input.paymentMethod==='online'?'pending':'unpaid',input.paymentMethod,JSON.stringify(items),q.subtotal,q.deliveryFee,q.discount,q.total,input.address?JSON.stringify(input.address):null,input.note,q.promoId,input.scheduledFor??null,readyAt,current.fulfillment==='delivery'?new Date(readyAt.getTime()+q.deliveryMinutes*60000):null,idempotencyKey,requestHash])).rows[0];
-   await this.event(tx,created,null,status,actor.id,'Order placed');
+   const created=(await tx.query('INSERT INTO orders(id,number,branch_id,user_id,fulfillment,status,payment_status,payment_method,items,subtotal,delivery_fee,discount,total,address,note,promo_id,scheduled_for,estimated_ready_at,estimated_delivery_at,idempotency_key,request_hash,service_fee,tax) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10,$11,$12,$13,$14::jsonb,$15,$16,$17,$18, $19,$20,$21,$22,$23) RETURNING *',[id,number,current.branch_id,actor.id,current.fulfillment,status,input.paymentMethod==='online'?'pending':'unpaid',input.paymentMethod,JSON.stringify(items),q.subtotal,q.deliveryFee,q.discount,q.total,input.address?JSON.stringify(input.address):null,input.note,q.promoId,input.scheduledFor??null,readyAt,current.fulfillment==='delivery'?new Date(readyAt.getTime()+q.deliveryMinutes*60000):null,idempotencyKey,requestHash,q.serviceFee,q.tax])).rows[0];
+   await this.event(tx,created,null,status,initiator?.id||actor.id,initiator?'Phone or walk-in order created by staff':'Order placed');
+   if(initiator)await tx.query("INSERT INTO audit_logs(id,actor_id,action,entity_id,after_data) VALUES($1,$2,'order.manual-create',$3,$4::jsonb)",[randomUUID(),initiator.id,id,JSON.stringify({branchId:current.branch_id,customerId:actor.id,total:q.total})]);
    if(input.paymentMethod==='online')await tx.query('INSERT INTO payments(id,order_id,provider,reference,amount,simulated) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),id,this.gateway.name,'MZ-'+id,q.total,this.gateway.simulated]);
-   await tx.query("UPDATE carts SET selections='[]',promo_code=NULL,version=version+1,updated_at=now() WHERE id=$1",[current.id]);
+   if(!initiator)await tx.query("UPDATE carts SET selections='[]',promo_code=NULL,version=version+1,updated_at=now() WHERE id=$1",[current.id]);
    return created;
   });
   if(order.payment_method==='online'){
@@ -94,6 +106,22 @@ export class OrdersService {
   if(staff&&!['super_admin','support_agent'].includes(actor.role)&&!actor.branch_id)return [];
   return this.db.query(staff?"SELECT o.*,b.name AS branch_name FROM orders o JOIN branches b ON b.id=o.branch_id WHERE ($1::uuid IS NULL OR branch_id=$1) AND ($2::text<>'rider' OR rider_id=$3) ORDER BY created_at DESC LIMIT 200":"SELECT o.*,b.name AS branch_name FROM orders o JOIN branches b ON b.id=o.branch_id WHERE user_id=$3 ORDER BY created_at DESC LIMIT 100",[staff&&actor.role!=='super_admin'?actor.branch_id:null,actor.role,actor.id]);
  }
+ async kitchenQueue(actor:Actor,raw:unknown){
+ const input=z.object({stage:z.enum(['new','preparing','ready']).default('new'),search:z.string().trim().max(100).default(''),fulfillment:z.enum(['all','pickup','delivery']).default('all'),branchId:z.string().uuid().optional(),sort:z.enum(['oldest','newest']).default('oldest'),page:z.coerce.number().int().min(1).max(100000).default(1)}).parse(raw);
+ const branch=actor.role==='super_admin'?input.branchId||null:actor.branch_id;
+ if(actor.role!=='super_admin'&&actor.role!=='support_agent'&&!branch)fail(403,'No kitchen is assigned.');
+ if(input.branchId&&!branchAllowed(actor,input.branchId))fail(403,'This kitchen is not assigned to you.');
+ const search=input.search?'%'+input.search.replace(/[\\%_]/g,character=>'\\'+character)+'%':'';
+ const where="FROM orders o JOIN users u ON u.id=o.user_id JOIN branches b ON b.id=o.branch_id WHERE ($1::uuid IS NULL OR o.branch_id=$1) AND o.status=ANY($2::text[]) AND ($3='all' OR o.fulfillment=$3) AND ($4='' OR o.number ILIKE $4 OR u.name ILIKE $4 OR u.phone ILIKE $4)";
+ const values=[branch,['placed','accepted','preparing','ready','out_for_delivery'],input.fulfillment,search];
+ const rows=await this.db.query('SELECT o.status,count(*)::int AS count '+where+' GROUP BY o.status',values);
+ const count=(statuses:string[])=>rows.filter(r=>statuses.includes(r.status)).reduce((sum,r)=>sum+r.count,0);
+ const counts={new:count(['placed']),preparing:count(['accepted','preparing']),ready:count(['ready','out_for_delivery'])};
+ const pageSize=12,total=counts[input.stage],page=Math.max(1,Math.min(input.page,Math.ceil(total/pageSize)||1));
+ const statuses={new:['placed'],preparing:['accepted','preparing'],ready:['ready','out_for_delivery']}[input.stage];
+ const items=await this.db.query('SELECT o.*,u.name AS customer_name,b.name AS branch_name '+where+' AND o.status=ANY($5::text[]) ORDER BY o.created_at '+(input.sort==='oldest'?'ASC':'DESC')+',o.id LIMIT $6 OFFSET $7',[...values,statuses,pageSize,(page-1)*pageSize]);
+ return {items,counts,page,pageSize,total};
+ }
  async detail(id:string,actor:Actor):Promise<any>{
   const order=(await this.db.query('SELECT o.*,b.name as branch_name,b.phone as branch_phone FROM orders o JOIN branches b ON b.id=o.branch_id WHERE o.id=$1',[id]))[0];if(!order)fail(404,'Order not found.');
   if(actor.role==='customer'?order.user_id!==actor.id:!branchAllowed(actor,order.branch_id)||(actor.role==='rider'&&order.rider_id!==actor.id))fail(403,'You cannot access this order.');
@@ -106,7 +134,7 @@ export class OrdersService {
  }
  async event(tx:PoolClient,order:any,from:string|null,to:string,actorId:string|null,note:string){
   await tx.query('INSERT INTO order_events(id,order_id,from_status,to_status,actor_id,note) VALUES($1,$2,$3,$4,$5,$6)',[randomUUID(),order.id,from,to,actorId,note]);
-  await tx.query('INSERT INTO notifications(id,user_id,order_id,title,body) VALUES($1,$2,$3,$4,$5)',[randomUUID(),order.user_id,order.id,'Order '+order.number,to.replaceAll('_',' ')]);
+  await this.notifications.record(tx,{userId:order.user_id,orderId:order.id,number:order.number,event:to});
  }
  async releaseStock(tx:PoolClient,order:any){
   if(order.stock_released)return;
@@ -168,7 +196,7 @@ export class OrdersService {
     await tx.query("UPDATE payments SET status='failed' WHERE id=$1",[payment.id]);await tx.query("UPDATE orders SET payment_status='failed' WHERE id=$1",[order.id]);
    } else if(event.type==='refund.processed'){
     const r=(await tx.query("UPDATE refunds SET status='processed' WHERE id=$1 AND payment_id=$2 AND status='pending' RETURNING amount",[event.refundId,payment.id])).rows[0];
-    if(r){const refunded=payment.refunded_amount+r.amount;await tx.query("UPDATE payments SET refunded_amount=$1,status=CASE WHEN $1>=amount THEN 'refunded' ELSE 'succeeded' END WHERE id=$2",[refunded,payment.id]);await tx.query("UPDATE orders SET payment_status=$1 WHERE id=$2",[refunded>=payment.amount?'refunded':'partially_refunded',order.id]);}
+    if(r){await this.notifications.record(tx,{userId:order.user_id,orderId:order.id,number:order.number,event:'refunded'});const refunded=payment.refunded_amount+r.amount;await tx.query("UPDATE payments SET refunded_amount=$1,status=CASE WHEN $1>=amount THEN 'refunded' ELSE 'succeeded' END WHERE id=$2",[refunded,payment.id]);await tx.query("UPDATE orders SET payment_status=$1 WHERE id=$2",[refunded>=payment.amount?'refunded':'partially_refunded',order.id]);}
    }
    await tx.query('UPDATE webhook_events SET processed_at=now() WHERE id=$1',[id]);return {order,refund};
   });

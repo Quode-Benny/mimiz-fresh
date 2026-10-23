@@ -1,14 +1,16 @@
 # Provider status
 
-| Concern | Local implementation | Live status |
+| Concern | Implemented | Verification limit |
 | --- | --- | --- |
-| Payments | Persistent mock gateway; HMAC-SHA512 webhooks; verify/refund; BullMQ delivery and retries | Paystack source implemented, UNVERIFIED with real/test credentials |
-| Customer SMS | Hashed random OTP persisted with a Dev Inbox record; explicit demo code | Live adapter outstanding; console mode only is supported |
-| Email | No transactional flows yet | Console/live email adapters outstanding |
-| Maps | Leaflet + OpenStreetMap display; browser geolocation; PostGIS radius matching | Google/Nominatim provider integration outstanding |
-| Images | Local ignored data/uploads; Sharp validation + responsive WebP; immutable public paths | S3 and storage migration outstanding |
-| Errors | Server logs and consistent API error responses | Sentry adapter outstanding |
-| Realtime/jobs | Real Redis, Socket.IO and BullMQ | No external paid provider required |
-| Push | PWA shell present | VAPID push delivery outstanding |
+| Payments | Persistent mock; signed webhooks, verify, retries/refunds; Paystack adapter | Mock tested end to end. Paystack UNVERIFIED with merchant test/live credentials |
+| SMS | Durable console outbox; Hubtel and Arkesel adapters; OTP and critical order notifications | Local contract tests use stub transport; sender approval and actual delivery unverified |
+| Email | Console and Resend adapters | Contract tested; actual sender/domain and transactional workflows unverified |
+| Maps | Leaflet/OSM, Ghana-only explicit Nominatim search, Redis cache/rate gate, Google geocoding/routing adapters | Provider transport contracts tested; public search availability and real route estimates need deployment acceptance |
+| Images | Sharp-validated responsive public WebP and authenticated private chat photos through local/S3 storage | Local/S3 adapter and source-preserving hash-checked migration tool implemented; cloud bucket/credentials UNVERIFIED |
+| Errors | Consistent error envelopes and local server logs | Console/Sentry error adapter and structured privacy-checked request logs implemented; live Sentry project/alerts UNVERIFIED |
+| Push | VAPID subscription handling, durable retries, service-worker notifications | Subscription privacy/security tested; real browser-device delivery unverified |
+| Jobs/realtime | Redis, BullMQ, portal-authenticated Socket.IO, polling fallback | Local database/queue/browser flows tested |
 
-Secrets stay in ignored environment files. A provider selected without an implemented adapter must fail startup rather than quietly use simulated behaviour. Live adapter verification is a separate acceptance gate, never inferred from a successful local build.
+Selected external adapters require their configuration instead of silently falling back to mocks. Production blocks demo providers/OTP unless the explicit cash-only override is set. Live verification is a separate acceptance gate.
+
+See installation.md for first-owner provisioning and secret handling, maps.md for public geocoder usage constraints, and backups.md for current backup scope.

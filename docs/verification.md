@@ -1,32 +1,38 @@
 # Local verification - 2026-10-21
 
-## Passed
+## Current checks
 
-- Web/API TypeScript checks.
-- 17 pure domain tests and 6 payment-provider contract/scenario tests.
-- Production Next.js + Serwist build and executable NestJS API bundle.
-- Consolidated Playwright acceptance: 20 passed, 8 intentional skips. The skipped cases repeat backend-only scenarios under the mobile project; mobile and desktop customer/staff/browser flows both ran.
-- Customer browse/customise/server-cart/OTP/pickup checkout/tracking/reload.
-- Staff login, kitchen/catalogue visibility, owner settings and integration page.
-- Forged/unsigned webhook rejection, duplicate payment delivery, decline/retry, asynchronous refunds, late success after timeout.
-- Duplicate concurrent order submission, two buyers competing for one tracked portion, pending partial-refund reservation.
-- Customer order ownership/CSRF, assigned-rider read/write/location boundaries and location removal on completion.
-- PostGIS delivery coverage, stale cart versions, uploaded-image byte validation and WebP delivery.
-- Automated WCAG AA checks on menu, meal dialog and bag at mobile/desktop widths.
-- Production PWA manifest/worker, public menu caching, exclusion of private API paths, and offline fallback after the temporary owned production server was stopped.
-- Built API process started against real PostgreSQL/PostGIS + Redis; production mock/demo provider guard rejected unsafe startup.
-- Setup command preserved existing .env and reused the isolated containers.
-- API imported-file reload was demonstrated with polling enabled.
-- .env, .local-admin, uploads, browser traces and generated service worker remain ignored.
+The final compiled Docker mobile/desktop acceptance run passed 51 cases with 21 intentional duplicate service cases skipped (72 total, no failures).
 
-## Findings corrected during verification
+- API/web TypeScript checks and Linux standalone production web build passed.
+- Unit suites pass 88 cases: 27 domain, 41 provider/storage/error contracts and 20 authenticator cases. The final invocation reused unchanged Turbo results.
+- Cross-tab expiry renews once without invalidating the refresh family; a forced connection failure after renewal recovers without signing out. All four mobile/desktop cases passed.
+- Cart-readiness regressions passed on mobile and desktop: fulfillment controls wait for the server cart and persist only after the update succeeds.
+- Six storefront browser cases passed, including pickup preference persistence. Layout overflow was checked from 320 through 1280 pixels.
+- Automated WCAG AA checks passed on all sixteen reviewed mobile customer, kitchen, administration and rider screens. The review exposed and corrected the hidden sign-out name and keyboard access to scrolling reports.
+- Current Docker PWA acceptance passed: manifest, worker, strict public-menu-only API caching and offline fallback after stopping only the owned temporary container.
+- Running-container logs preserve request correlation, route template, status and timing while excluding query/auth/cookie sentinels.
+- Acceptance safety refuses production, live payment/SMS/email, cloud storage/error/maps and non-demo OTP configurations before resetting development rate counters.
 
-- Restored keyboard focus to the opening control after dialogs close.
-- Removed overlapping hero text and showed an explicit saved-order state while tracking navigation loads.
-- Cold webpack compilation exceeded the earlier 5-second assertion window. Development test timeouts now allow compilation without removing functional assertions.
-- The earlier development API watcher did not reload imported files in this Windows workspace. It now explicitly includes API sources and polls; the partial-refund race was rerun against the reloaded code and the final consolidated run passed.
-- PWA offline acceptance disconnects an owned temporary server as well as emulating offline mode, avoiding service-worker network-emulation ambiguity.
+## Earlier integration and recovery checks
+
+The complete acceptance suite covers customer browse/options/server cart/OTP/checkout/tracking; independent portal sessions and role boundaries; manual orders, printing, catalogue and company settings; assigned-rider actions/location; profiles/reorder/account anonymisation; private support photos; authenticator setup/recovery; and notifications.
+
+Payment scenarios include forged/unsigned and duplicate webhooks, decline/retry, asynchronous refunds, late success, concurrent duplicate submissions, last-portion contention and pending partial-refund reservation. All payments remain simulated.
+
+- The storage/account follow-up passed 12 cases with 6 intentional mobile duplicates skipped.
+- Executable API startup and production demo-provider rejection passed.
+- Empty-installation provisioning passed all eight migrations with one owner/company and no sample kitchens/orders.
+- Native and active-container photo backup paths and isolated database restore rehearsals passed.
+- A real filesystem deletion failure persisted in the photo-deletion outbox, backed off and retried successfully using a separate temporary database.
+- The source-preserving photo migration dry run validated 29 local photos; no cloud migration was executed.
+- Windows production/PWA acceptance passed earlier; the current review stack uses Docker.
+- Secrets, local credentials, photos, backups and browser artifacts remain ignored.
 
 ## Limits
 
-This verifies the local demo milestone, not the whole supplied v1 Definition of Done or live-provider readiness. See sprint-status.md and providers.md. GitHub Actions is configured but has not run remotely from this local workspace. No live charge, SMS, email, storage migration, restore rehearsal or production deployment is claimed.
+This verifies local development behavior. Live merchant settlement/refunds, real SMS/email, real-device push, S3/Sentry acceptance, approved restaurant data and production deployment remain outstanding. Generated API-client coverage, Storybook, localization extraction and schema-tooling conformance remain on the supplied technical checklist. CI is prepared but has not run remotely. No live charge, external message, cloud migration or public deployment is claimed.
+
+See review-notes.md, sprint-status.md and providers.md for operating instructions and remaining scope.
+
+Final recovery check: a fresh database/active-container-photo backup was created after the acceptance suite, then restored into an isolated temporary database. Schema/orders/users/PostGIS and photo archive integrity passed; the running development database was unchanged. Web and API returned HTTP 200 afterward.

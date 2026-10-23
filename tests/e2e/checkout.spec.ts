@@ -1,4 +1,4 @@
-import {test,expect} from '@playwright/test';
+import {test,expect} from './fixtures';
 import {randomInt} from 'node:crypto';
 test.setTimeout(90000);
 test('customer can sign in and place a pickup order from the storefront',async({page},info)=>{

@@ -1,5 +1,7 @@
 const {spawn}=require('node:child_process');
 const {resolve}=require('node:path');
+process.loadEnvFile(resolve('.env'));
+require('./local-test-mode.cjs').assertLocalTestMode();
 (async()=>{
  const entry=resolve('apps/api/dist/main.js');
  const server=spawn(process.execPath,[entry],{cwd:process.cwd(),env:{...process.env,NODE_ENV:'development',API_PORT:'4001'},stdio:'ignore',windowsHide:true});

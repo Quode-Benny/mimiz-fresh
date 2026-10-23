@@ -1,0 +1,15 @@
+"use client";
+import {useState} from 'react';
+import {useQuery} from '@tanstack/react-query';
+import {api} from '../../lib/api';
+import {Failure} from '../platform-frame';
+import {downloadCsv} from '../../lib/csv';
+export function NotificationManagement({branchId,owner}:{branchId?:string;owner:boolean}){
+ const [error,setError]=useState<any>(null),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+ const deliveries=useQuery<any[]>({queryKey:['notification-deliveries',branchId],queryFn:()=>api('/staff/notification-deliveries'+(branchId?'?branchId='+branchId:'')),refetchInterval:10000});
+ const templates=useQuery<any[]>({queryKey:['notification-templates'],queryFn:()=>api('/staff/notification-templates'),enabled:owner});
+ return <><section className="panel"><h2>Order communications</h2><p>Delivery attempts are durable and retried with backoff. SMS is limited to placed, out for delivery and cancelled updates.</p>{deliveries.error&&<Failure error={deliveries.error}/>}<button className="button" disabled={!deliveries.data?.length} onClick={()=>downloadCsv('mimiz-message-delivery',deliveries.data!)}>Export delivery totals</button><div className="data-table" tabIndex={0} role="region" aria-label="Notification delivery totals"><table><thead><tr><th>Channel</th><th>Status</th><th>Messages</th><th>SMS segments</th></tr></thead><tbody>{deliveries.data?.map(row=><tr key={row.channel+row.status}><td>{row.channel}</td><td>{row.status}</td><td>{row.messages}</td><td>{row.sms_segments}</td></tr>)}</tbody></table></div><p className="small-note">SMS segment totals help estimate provider cost. Console messages are simulated; real push requires a browser subscription.</p></section>
+ {error&&<Failure error={error}/>} {notice&&<p className="success-note" role="status">{notice}</p>}
+ {owner&&<div className="account-grid">{templates.data?.map(template=><section className="panel" key={template.event}><h2>{template.event.replaceAll('_',' ')}</h2><form onSubmit={async event=>{event.preventDefault();setBusy(true);setError(null);const form=new FormData(event.currentTarget);try{await api('/staff/notification-templates/'+template.event,{method:'PATCH',body:JSON.stringify({title:form.get('title'),body:form.get('body'),sms:form.get('sms')==='on'})});await templates.refetch();setNotice('Notification template saved.');}catch(error){setError(error);}finally{setBusy(false);}}}><label>Title<input name="title" defaultValue={template.title} required minLength={3} maxLength={120}/></label><label>Message<textarea name="body" defaultValue={template.body} required minLength={3} maxLength={500}/></label><small className="small-note">Use {'{{number}}'} for the order number.</small>{['placed','out_for_delivery','cancelled'].includes(template.event)&&<label className="payment-option"><input type="checkbox" name="sms" defaultChecked={template.sms}/>Critical SMS update</label>}<button className="button" disabled={busy} style={{marginTop:20}}>Save template</button></form></section>)}</div>}
+ </>;
+}

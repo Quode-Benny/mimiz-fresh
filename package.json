@@ -11,7 +11,11 @@
     "setup": "node scripts/setup.mjs",
     "test:reset-limits": "node scripts/reset-test-limits.cjs",
     "verify:api": "node scripts/verify-api-build.cjs",
-    "verify:pwa": "node scripts/verify-pwa.cjs"
+    "verify:pwa": "node scripts/verify-pwa.cjs",
+    "backup": "node scripts/backup.mjs",
+    "verify:restore": "node scripts/restore-rehearsal.mjs",
+    "verify:installation": "node scripts/verify-installation.mjs",
+    "verify:accessibility": "node scripts/review-accessibility.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.10.2",

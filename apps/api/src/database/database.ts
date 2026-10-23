@@ -17,8 +17,11 @@ export class Database {
   catch(error){await client.query('ROLLBACK');throw error;} finally{client.release();}
  }
  async migrate() {
-  const source=await readFile(existsSync(resolve(__dirname,'001_initial.sql'))?resolve(__dirname,'001_initial.sql'):resolve(projectRoot,'apps/api/src/database/001_initial.sql'),'utf8');
-  await this.transaction(async client => {await client.query('SELECT pg_advisory_xact_lock(7234169)');await client.query(source);await client.query("INSERT INTO schema_migrations(name) VALUES('001_initial') ON CONFLICT DO NOTHING");});
+  for(const name of ['001_initial','002_operations','003_workspace_security','004_notifications','005_chat','006_staff_security','007_company_settings','008_photo_deletions','009_assistant','010_delivery_chat']){
+   const file=name+'.sql';
+   const source=await readFile(existsSync(resolve(__dirname,file))?resolve(__dirname,file):resolve(projectRoot,'apps/api/src/database',file),'utf8');
+   await this.transaction(async client=>{await client.query('SELECT pg_advisory_xact_lock(7234169)');if(name!=='001_initial'&&(await client.query('SELECT 1 FROM schema_migrations WHERE name=$1',[name])).rowCount)return;await client.query(source);await client.query('INSERT INTO schema_migrations(name) VALUES($1) ON CONFLICT DO NOTHING',[name]);});
+  }
  }
  async close(){await this.pool.end();}
 }

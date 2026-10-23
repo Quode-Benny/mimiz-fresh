@@ -1,3 +1,5 @@
+import {defaultDayparts,withinWindow,type DaypartDefinition} from './operations';
+export * from './operations';
 import type { BasketSelection, Daypart, MenuItem, PricedBasketLine } from '@mimiz/shared';
 export function basketTotal(lines: readonly { pricePesewas: number; quantity: number }[]): number {
   let total = 0;
@@ -11,9 +13,9 @@ export function basketTotal(lines: readonly { pricePesewas: number; quantity: nu
 export function formatMoney(pesewas: number): string {
   return `\u20b5${(pesewas / 100).toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
-export function daypartAt(date: Date): Daypart {
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Accra', hour: 'numeric', hourCycle: 'h23' }).format(date));
-  return hour >= 5 && hour < 11 ? 'breakfast' : hour < 15 && hour >= 11 ? 'lunch' : hour >= 15 && hour < 18 ? 'afternoon' : hour >= 18 && hour < 22 ? 'dinner' : 'late_night';
+export function daypartAt(date:Date,definitions:DaypartDefinition[]=defaultDayparts):Daypart{
+ const time=new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Accra',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).format(date);
+ return definitions.find(definition=>withinWindow(time,definition.start,definition.end))?.id||'late_night';
 }
 export function priceSelection(item: MenuItem, selection: BasketSelection): PricedBasketLine {
   if (!item.available) throw new Error('This dish is currently unavailable.');

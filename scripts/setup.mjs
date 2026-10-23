@@ -1,5 +1,6 @@
+import {createRequire} from 'node:module';
 import {randomBytes} from 'node:crypto';
-import {access,writeFile,appendFile} from 'node:fs/promises';
+import {access,writeFile,appendFile,readFile} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {resolve,join} from 'node:path';
 import {existsSync} from 'node:fs';
@@ -17,6 +18,13 @@ if(!existsSync(envPath)){
  ].join('\n'),{mode:0o600});
  console.log('Created ignored .env with generated local secrets.');
 }else console.log('Kept existing .env.');
+const envText=await readFile(envPath,'utf8');
+if(!/^VAPID_PUBLIC_KEY=.+$/m.test(envText)&&!/^NODE_ENV=production$/m.test(envText)){
+ const requireApi=createRequire(resolve(root,'apps/api/package.json'));const webpush=requireApi('web-push');const keys=webpush.generateVAPIDKeys();
+ await appendFile(envPath,'\nVAPID_PUBLIC_KEY='+keys.publicKey+'\nVAPID_PRIVATE_KEY='+keys.privateKey+'\nVAPID_SUBJECT=mailto:local-demo@mimiz.invalid\n');
+ console.log('Generated local VAPID keys in ignored .env.');
+}
+if(!/^TOTP_ENCRYPTION_KEY=.+$/m.test(envText)&&!/^NODE_ENV=production$/m.test(envText)){await appendFile(envPath,'\nTOTP_ENCRYPTION_KEY='+randomBytes(48).toString('base64url')+'\n');console.log('Generated local authenticator encryption key in ignored .env.');}
 let docker=process.env.DOCKER_BIN||'docker';
 if(process.platform==='win32'){
  const candidate=join(process.env.LOCALAPPDATA||'','Programs','DockerDesktop','resources','bin','docker.exe');

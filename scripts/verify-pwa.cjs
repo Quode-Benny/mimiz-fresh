@@ -5,10 +5,11 @@ const {resolve}=require('node:path');
 const requireWeb=createRequire(resolve('apps/web/package.json'));
 const nextCli=requireWeb.resolve('next/dist/bin/next');
 const port=3004,origin='http://localhost:'+port;
-const server=spawn(process.execPath,[nextCli,'start','--port',String(port)],{cwd:resolve('apps/web'),windowsHide:true,stdio:'ignore'});
+const server=spawn(process.execPath,[nextCli,'start','--port',String(port)],{cwd:resolve('apps/web'),env:{...process.env,NODE_ENV:'production'},windowsHide:true,stdio:'ignore'});
 (async()=>{
  let browser;
  try{
+  const safety=await fetch('http://127.0.0.1:4000/api/v1/config',{signal:AbortSignal.timeout(5000)});if(!safety.ok||(await safety.json()).safeAcceptance!==true)throw new Error('PWA acceptance requires a local demo API; live services are refused.');
   for(let attempt=0;attempt<60;attempt++){try{if((await fetch(origin)).ok)break;}catch{}await new Promise(resolve=>setTimeout(resolve,500));}
   browser=await chromium.launch();const context=await browser.newContext({serviceWorkers:'allow'});const page=await context.newPage();
   await page.goto(origin);

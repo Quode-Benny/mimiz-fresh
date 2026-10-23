@@ -1,4 +1,5 @@
-import {test,expect,request} from '@playwright/test';
+import {test,expect,request} from './fixtures';
+import AxeBuilder from '@axe-core/playwright';
 import {readFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 test.setTimeout(90000);
@@ -7,10 +8,19 @@ test('staff can sign in, review the kitchen and open administration',async({page
  await page.goto('/staff');await page.getByLabel('Email',{exact:true}).fill(email!);await page.getByLabel('Password',{exact:true}).fill(password!);
  await page.getByRole('button',{name:'Sign in to staff workspace'}).click();
  await expect(page.getByRole('heading',{name:'The kitchen, in sync.'})).toBeVisible();
+ if(info.project.name==='mobile'){
+  await expect(page.getByLabel('Search kitchen queue',{exact:true})).toBeVisible();
+  for(const width of [320,360,390]){await page.setViewportSize({width,height:800});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);}
+  for(const theme of ['light','dark']){await page.getByLabel('Appearance',{exact:true}).selectOption(theme);const scan=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();expect(scan.violations).toEqual([]);}
+  await page.getByLabel('Appearance',{exact:true}).selectOption('system');await page.setViewportSize({width:360,height:800});
+ }
  await page.getByRole('button',{name:'Menu',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Branch menu',exact:true})).toBeVisible();
  await expect(page.getByRole('heading',{name:'Smoky Ghana jollof',exact:true})).toBeVisible();
- await page.getByRole('link',{name:'Administration',exact:true}).click();
+ await page.goto('/admin');
+ await expect(page.getByLabel('Email',{exact:true})).toBeVisible();
+ await page.getByLabel('Email',{exact:true}).fill(email!);await page.getByLabel('Password',{exact:true}).fill(password!);
+ await page.getByRole('button',{name:'Sign in to administration',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Set your kitchen up for success.'})).toBeVisible();
  await page.getByRole('button',{name:'Kitchen settings',exact:true}).click();
  await expect(page.getByLabel('Kitchen name')).toHaveValue('Accra kitchen');

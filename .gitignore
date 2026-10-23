@@ -13,3 +13,7 @@ playwright-report/
 data/
 apps/web/public/sw*
 apps/web/public/swe-worker*
+
+.provisioned-owner
+
+.next-dev/

@@ -1,4 +1,4 @@
-import {test,expect,request as http} from '@playwright/test';
+import {test,expect,request as http} from './fixtures';
 import {readFile} from 'node:fs/promises';
 import {randomUUID,randomInt} from 'node:crypto';
 test.setTimeout(90000);
@@ -97,7 +97,7 @@ test('two customers cannot buy the same last portion',async({},info)=>{
  }finally{await call(owner,'/staff/catalogue/jollof',{branchId:ca.branch_id,available:true,stock:null},'PATCH');}
  await owner.dispose();await a.dispose();await b.dispose();
 });
-test('only the assigned rider can see, locate or complete a delivery',async({},info)=>{
+test('only the assigned rider can see, locate or complete a delivery',async({browser},info)=>{
  test.skip(info.project.name!=='desktop');const owner=await client(),buyer=await client(),a=await client(),b=await client();
  await staff(owner);await customer(buyer);const cart=await fillCart(buyer,'delivery');
  const password='qa-'+randomUUID();const emailA='rider-'+randomUUID()+'@example.test',emailB='rider-'+randomUUID()+'@example.test';
@@ -109,12 +109,38 @@ test('only the assigned rider can see, locate or complete a delivery',async({},i
  expect(result.response.status(),JSON.stringify(result.data)).toBe(201);const id=result.data.id;
  for(const status of ['accepted','preparing','ready'])expect((await call(owner,'/orders/'+id+'/transition',{status})).response.status()).toBe(201);
  expect((await call(owner,'/staff/orders/'+id+'/rider',{riderId:riders[0]},'PATCH')).response.status()).toBe(200);
+ const deliveryThread=(await call(buyer,'/orders/'+id+'/rider-thread')).data.id;expect(deliveryThread).toBeTruthy();
+ expect((await call(b,'/threads/'+deliveryThread+'/messages',undefined,'GET')).response.status()).toBe(403);
+ expect((await call(owner,'/threads/'+deliveryThread,undefined,'GET')).response.status()).toBe(403);
+ expect((await call(buyer,'/threads/'+deliveryThread+'/messages',{body:'Please meet me at the blue gate.'})).response.status()).toBe(201);
+ const reply=await call(a,'/threads/'+deliveryThread+'/messages',{body:'I will call when I reach the gate.'});expect(reply.response.status()).toBe(201);expect(reply.data.some((m:any)=>m.body.includes('blue gate'))).toBe(true);
+ const customerMessages=(await call(buyer,'/threads/'+deliveryThread+'/messages',undefined,'GET')).data;expect(customerMessages.at(-1).body).toContain('I will call');
+ expect((await call(owner,'/staff/chats',undefined,'GET')).data.some((thread:any)=>thread.id===deliveryThread)).toBe(false);
+ expect((await call(a,'/auth/staff-login',{email:emailA,password},'POST',{'X-Mimiz-Portal':'rider'})).response.status()).toBe(201);
+ const customerUI=await browser.newContext({storageState:await buyer.storageState()}),riderUI=await browser.newContext({storageState:await a.storageState()});
+ try{
+  const cp=await customerUI.newPage(),rp=await riderUI.newPage();
+  await cp.goto(root+'/orders/'+id);await cp.getByRole('button',{name:'Chat about delivery',exact:true}).click();
+  await rp.goto(root+'/rider');await rp.getByRole('button',{name:'Chat about delivery',exact:true}).click();
+  await cp.getByLabel('Message about delivery',{exact:true}).fill('Customer UI delivery note');await cp.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(rp.getByText('Customer UI delivery note',{exact:true})).toBeVisible();
+  await rp.getByLabel('Message about delivery',{exact:true}).fill('Acknowledged from rider UI');await rp.getByRole('button',{name:'Send',exact:true}).click();
+  await expect(cp.getByText('Acknowledged from rider UI',{exact:true})).toBeVisible();
+ }finally{await customerUI.close();await riderUI.close();}
+
+ expect((await call(owner,'/staff/orders/'+id+'/rider',{riderId:riders[1]},'PATCH')).response.status()).toBe(200);
+ expect((await call(a,'/threads/'+deliveryThread+'/messages',undefined,'GET')).response.status()).toBe(403);
+ expect((await call(a,'/threads/'+deliveryThread+'/messages',{body:'Revoked rider attempt'})).response.status()).toBe(403);
+ const reassigned=(await call(buyer,'/orders/'+id+'/rider-thread')).data;expect(reassigned.id).not.toBe(deliveryThread);
+ expect((await call(owner,'/staff/orders/'+id+'/rider',{riderId:riders[0]},'PATCH')).response.status()).toBe(200);
  expect((await call(b,'/orders/'+id,undefined,'GET')).response.status()).toBe(403);
  expect((await call(b,'/orders/'+id+'/transition',{status:'out_for_delivery'})).response.status()).toBe(403);
  expect((await call(a,'/orders/'+id+'/transition',{status:'out_for_delivery'})).response.status()).toBe(201);
  expect((await call(a,'/rider/orders/'+id+'/location',{latitude:5.557,longitude:-.188})).response.status()).toBe(201);
  expect((await call(buyer,'/orders/'+id,undefined,'GET')).data.location.lat).toBe(5.557);
  expect((await call(a,'/orders/'+id+'/transition',{status:'completed'})).response.status()).toBe(201);
+ expect((await call(buyer,'/threads/'+deliveryThread+'/messages',{body:'After delivery'})).response.status()).toBe(409);
+ expect((await call(a,'/threads/'+deliveryThread+'/messages',{body:'After delivery'})).response.status()).toBe(409);
  const completed=await call(buyer,'/orders/'+id,undefined,'GET');expect(completed.data.status).toBe('completed');expect(completed.data.location).toBeNull();
  expect((await call(a,'/rider/orders/'+id+'/location',{latitude:5.557,longitude:-.188})).response.status()).toBe(403);
  for(const id of riders)await call(owner,'/staff/users/'+id,undefined,'DELETE');

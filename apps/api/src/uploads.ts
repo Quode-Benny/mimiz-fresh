@@ -1,5 +1,5 @@
 import {randomUUID} from 'node:crypto';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {photoStorage} from './storage';
 import {resolve} from 'node:path';
 import sharp from 'sharp';
 import {z} from 'zod';
@@ -12,7 +12,7 @@ export async function uploadImage(body:unknown){
  const buffer=Buffer.from(match[2]!,'base64');if(buffer.length>2000000)fail(400,'Choose a photo under 2 MB.');
  const decoder=sharp(buffer,{limitInputPixels:20000000,failOn:'error'});let metadata;try{metadata=await decoder.metadata();}catch{fail(400,'This photo could not be decoded. Try a different image.');}
  if(!['jpeg','png','webp'].includes(metadata.format||'')||metadata.pages&&metadata.pages>1)fail(400,'Use a still JPEG, PNG or WebP photo.');
- const id=randomUUID();const folder=resolve(uploadRoot,id);await mkdir(folder,{recursive:true});
- for(const size of [320,640,1200])await writeFile(resolve(folder,size+'.webp'),await sharp(buffer,{limitInputPixels:20000000}).rotate().resize({width:size,height:size,fit:'inside',withoutEnlargement:true}).webp({quality:82}).toBuffer());
+ const id=randomUUID();
+ for(const size of [320,640,1200])await photoStorage.put('uploads/'+id+'/'+size+'.webp',await sharp(buffer,{limitInputPixels:20000000}).rotate().resize({width:size,height:size,fit:'inside',withoutEnlargement:true}).webp({quality:82}).toBuffer());
  return {url:'/api/v1/uploads/'+id+'/640.webp',sizes:[320,640,1200]};
 }

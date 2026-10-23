@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import AxeBuilder from '@axe-core/playwright';
 test('menu and meal dialogs meet automated WCAG AA checks', async ({ page }) => {
  await page.goto('/');

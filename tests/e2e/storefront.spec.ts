@@ -1,8 +1,9 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { mkdir } from 'node:fs/promises';
 test('Ghanaian menu, meal options and saved bag', async ({page}, info) => {
  const errors:string[]=[];page.on('pageerror',error=>errors.push(error.message));
  await page.goto('/');
+ await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
  await expect(page.getByRole('heading',{name:'A little taste of home.'})).toBeVisible();
  await page.getByRole('button',{name:'All items',exact:true}).click();
  await expect(page.locator('.dish')).toHaveCount(14);
@@ -37,7 +38,7 @@ test('Ghanaian menu, meal options and saved bag', async ({page}, info) => {
  await mkdir('artifacts/screenshots',{recursive:true});
  await page.screenshot({path:'artifacts/screenshots/'+info.project.name+'-basket.png'});
  await page.keyboard.press('Escape');
- await page.locator('img').evaluateAll(images=>Promise.all(images.map(image=>image.decode().catch(()=>{}))));
+ await page.locator('img').evaluateAll(images=>Promise.all(images.map(image=>{image.loading='eager';return image.decode().catch(()=>{});})));
  expect(await page.locator('img').evaluateAll(images=>images.filter(image=>!image.complete||!image.naturalWidth).length)).toBe(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
  await page.evaluate(()=>window.scrollTo({top:0,behavior:"instant"}));
@@ -49,7 +50,7 @@ test('kitchen preference and photo credits',async({page})=>{
  await page.goto('/');
  await page.locator('.order-strip').getByRole('button',{name:'Pickup',exact:true}).click();
  await page.locator('.kitchen-selector').click();
- await expect(page.getByRole('dialog').getByText('Fictional sample branch')).toBeVisible();
+ await expect(page.getByRole('dialog').getByText('Fictional Osu demo kitchen, Accra')).toBeVisible();
  await page.keyboard.press('Escape');await page.reload();
  await expect(page.locator('.order-strip').getByRole('button',{name:'Pickup',exact:true})).toHaveAttribute('aria-pressed','true');
  await page.goto('/photo-credits');

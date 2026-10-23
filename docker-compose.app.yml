@@ -1,0 +1,47 @@
+services:
+  api:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: .env
+    environment:
+      NODE_ENV: development
+      API_HOST: 0.0.0.0
+      OLLAMA_URL: http://ollama:11434
+      DATABASE_URL: postgresql://mimiz:${POSTGRES_PASSWORD}@postgres:5432/mimiz_fresh
+      REDIS_URL: redis://redis:6379
+      STAFF_CREDENTIALS_FILE: /app/data/.local-admin
+    ports: ["127.0.0.1:4000:4000"]
+    volumes: ["uploads_data:/app/data"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  web:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    ports: ["127.0.0.1:3002:3002"]
+    depends_on:
+      api: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3002').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+volumes:
+  uploads_data:

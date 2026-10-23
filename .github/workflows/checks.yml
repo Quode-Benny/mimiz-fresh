@@ -18,9 +18,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm setup
+      - run: pnpm run setup
       - run: pnpm typecheck
       - run: pnpm test
+      - run: node scripts/verify-test-safety.cjs
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium
       - name: Start application
@@ -28,6 +29,11 @@ jobs:
           mkdir -p artifacts
           pnpm dev > artifacts/dev.log 2>&1 &
           node scripts/wait-ready.mjs
+      - run: pnpm verify:installation
+      - run: pnpm --filter @mimiz/api exec tsx scripts/verify-photo-cleanup.cts
+      - run: pnpm backup
+      - run: pnpm verify:restore
       - run: pnpm test:e2e
+      - run: pnpm verify:accessibility
       - run: pnpm verify:api
       - run: pnpm verify:pwa

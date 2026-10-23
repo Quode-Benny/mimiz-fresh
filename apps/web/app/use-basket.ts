@@ -24,6 +24,6 @@ export function useBasket(){
  }
  async function change(key:string,delta:number){const cart=client.getQueryData<ServerCart>(['cart']);if(!cart)return;try{await update(cart.selections.flatMap((entry,index)=>{if(cart.lines[index]?.key!==key)return [entry];const quantity=Math.min(20,entry.quantity+delta);return quantity>0?[{...entry,quantity}]:[];}));}catch(error:any){setNotice(error.message);}}
  async function remove(key:string){const cart=client.getQueryData<ServerCart>(['cart']);if(!cart)return;try{await update(cart.selections.filter((_,index)=>cart.lines[index]?.key!==key));}catch(error:any){setNotice(error.message);}}
- async function fulfillment(value:'delivery'|'pickup'){const cart=client.getQueryData<ServerCart>(['cart']);if(!cart)return;await update(cart.selections,{fulfillment:value});}
+ async function fulfillment(value:'delivery'|'pickup'){const cart=client.getQueryData<ServerCart>(['cart']);if(!cart)throw new Error('Your bag is loading. Try again in a moment.');try{await update(cart.selections,{fulfillment:value});}catch(error:any){setNotice(error.message);throw error;}}
  return {data:query.data,lines:query.data?.lines||[],count:query.data?.count||0,total:query.data?.subtotal||0,add,change,remove,fulfillment,update,busy,ready:query.isSuccess,error:query.error,refresh:query.refetch,notice,dismissNotice:()=>setNotice('')};
 }

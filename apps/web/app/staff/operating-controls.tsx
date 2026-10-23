@@ -1,0 +1,10 @@
+"use client";
+import {useState} from 'react';
+import {useQueryClient} from '@tanstack/react-query';
+import {api,type Branch} from '../../lib/api';
+import {Failure} from '../platform-frame';
+export function OperatingControls({branch}:{branch:Branch}){
+ const client=useQueryClient(),[busy,setBusy]=useState(false),[error,setError]=useState<any>(null),[notice,setNotice]=useState('');
+ async function save(input:{accepting?:boolean;extraPrepMinutes?:number}){setBusy(true);setError(null);setNotice('');try{await api('/staff/branches/'+branch.id+'/operating',{method:'PATCH',body:JSON.stringify(input)});await Promise.all([client.invalidateQueries({queryKey:['branches']}),client.invalidateQueries({queryKey:['management-branches']})]);setNotice('Kitchen operating settings updated.');}catch(error){setError(error);}finally{setBusy(false);}}
+ return <section className="panel operating-controls"><div><h2>{branch.name}</h2><p>{branch.accepting?'Accepting new orders':'New orders paused'} / {branch.prep_minutes+(branch.extra_prep_minutes||0)} minutes preparation</p></div><button className="button" disabled={busy} onClick={()=>save({accepting:!branch.accepting})}>{branch.accepting?'Pause new orders':'Resume new orders'}</button><form key={branch.id+':'+branch.extra_prep_minutes} onSubmit={event=>{event.preventDefault();save({extraPrepMinutes:Number(new FormData(event.currentTarget).get('extra'))});}}><label>Extra preparation time when busy<select name="extra" defaultValue={branch.extra_prep_minutes||0}>{[...new Set([0,10,15,20,30,45,60,90,120,branch.extra_prep_minutes||0])].sort((a,b)=>a-b).map(minutes=><option key={minutes} value={minutes}>{minutes===0?'Normal preparation':'+ '+minutes+' minutes'}</option>)}</select></label><button className="button" disabled={busy}>Update preparation time</button></form>{error&&<Failure error={error}/>} {notice&&<p role="status">{notice}</p>}<p className="small-note">Pausing stops new orders. Existing tickets still need to be fulfilled.</p></section>;
+}

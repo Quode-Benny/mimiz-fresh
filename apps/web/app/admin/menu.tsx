@@ -1,0 +1,19 @@
+"use client";
+import {useState} from 'react';
+import {useQuery} from '@tanstack/react-query';
+import type {MenuItem} from '@mimiz/shared';
+import {formatMoney} from '@mimiz/domain';
+import {api} from '../../lib/api';
+import {CatalogueEditor} from '../staff/catalogue-editor';
+import {Failure} from '../platform-frame';
+export function MenuManagement({branchId,owner}:{branchId:string;owner:boolean}){
+ const [search,setSearch]=useState(''),[error,setError]=useState<any>(null),[busy,setBusy]=useState(false);
+ const query=useQuery<{items:(MenuItem&{archived:boolean})[]}>({queryKey:['management-menu',branchId],queryFn:()=>api('/staff/catalogue?branchId='+branchId)});
+ async function patch(id:string,changes:Record<string,unknown>){setBusy(true);setError(null);try{await api('/staff/catalogue/'+id,{method:'PATCH',body:JSON.stringify({branchId,...changes})});await query.refetch();}catch(error){setError(error);}finally{setBusy(false);}}
+ return <><section className="panel"><h2>Your menu, your way.</h2><p>Manage the company catalogue and this kitchen's availability. Archived dishes stay out of the customer menu.</p><label>Find a dish<input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Dish or category"/></label><div className="order-actions" style={{marginTop:18}}>{[true,false].map(available=><button key={String(available)} className="button" disabled={busy||!query.data} onClick={async()=>{if(!window.confirm((available?'Make all visible dishes available':'Mark all visible dishes sold out')+'?'))return;setBusy(true);try{for(const item of query.data!.items.filter(item=>!item.archived&&(item.name+' '+item.category).toLowerCase().includes(search.toLowerCase())))await api('/staff/catalogue/'+item.id,{method:'PATCH',body:JSON.stringify({branchId,available})});await query.refetch();}catch(error){setError(error);}finally{setBusy(false);}}}>{available?'Make filtered dishes available':'Mark filtered dishes sold out'}</button>)}</div></section>
+ {error&&<Failure error={error}/>} {query.error&&<Failure error={query.error}/>}
+ <div className="management-menu">{query.data?.items.filter(item=>(item.name+' '+item.category).toLowerCase().includes(search.toLowerCase())).map(item=><section className="panel management-dish" key={item.id}><div><span className="eyebrow">{item.category}</span><h2>{item.name}</h2><p>{formatMoney(item.pricePesewas)} / {item.archived?'Archived':item.available?'Available':'Unavailable'} / {item.stock==null?'Untracked stock':item.stock+' portions'}</p></div><div className="order-actions">{owner&&<CatalogueEditor item={item} branchId={branchId} refresh={()=>query.refetch()}/>}<button className="button" disabled={busy||item.archived} onClick={()=>patch(item.id,{available:!item.available})}>{item.available?'Mark sold out':'Make available'}</button>
+ <form className="stock-form" onSubmit={async event=>{event.preventDefault();const value=String(new FormData(event.currentTarget).get('stock'));await patch(item.id,{stock:value?Number(value):null});}}><label className="sr-only" htmlFor={'stock-'+item.id}>Stock for {item.name}</label><input id={'stock-'+item.id} name="stock" type="number" min={0} step={1} placeholder="Untracked" defaultValue={item.stock??''}/><button className="button" disabled={busy}>Save stock</button></form>
+ {owner&&<><button className="text-button" disabled={busy} onClick={async()=>{try{await api('/staff/catalogue/'+item.id+'/duplicate',{method:'POST',body:JSON.stringify({branchId})});await query.refetch();}catch(error){setError(error);}}}>Duplicate</button><button className="text-button" disabled={busy} onClick={()=>{if(item.archived||window.confirm('Archive '+item.name+' from all customer menus?'))patch(item.id,{archived:!item.archived});}}>{item.archived?'Restore dish':'Archive dish'}</button></>}</div></section>)}</div>
+ </>;
+}

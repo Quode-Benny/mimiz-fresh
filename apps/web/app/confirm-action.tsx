@@ -1,0 +1,6 @@
+"use client";
+import * as Dialog from '@radix-ui/react-dialog';
+import {X,ShieldCheck} from 'lucide-react';
+export function ConfirmAction({open,onOpenChange,title,description,children,confirm,onConfirm,busy=false,danger=false}:{open:boolean;onOpenChange:(value:boolean)=>void;title:string;description:string;children?:React.ReactNode;confirm:string;onConfirm:()=>void;busy?:boolean;danger?:boolean}){
+ return <Dialog.Root open={open} onOpenChange={value=>{if(!busy)onOpenChange(value);}}><Dialog.Portal><Dialog.Overlay className="modern-overlay"/><Dialog.Content className="modern-dialog"><span className={'dialog-emblem '+(danger?'danger':'')}><ShieldCheck size={26}/></span><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description>{children}<div className="dialog-actions"><button className="button" disabled={busy} onClick={()=>onOpenChange(false)}>Go back</button><button className={'button primary '+(danger?'danger':'')} disabled={busy} onClick={onConfirm}>{busy?'Saving...':confirm}</button></div><Dialog.Close className="dialog-close" aria-label="Close confirmation" disabled={busy}><X size={20}/></Dialog.Close></Dialog.Content></Dialog.Portal></Dialog.Root>;
+}

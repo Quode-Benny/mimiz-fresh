@@ -1,7 +1,7 @@
 const {createRequire}=require('node:module');
 const {resolve}=require('node:path');
 process.loadEnvFile(resolve(__dirname,'../.env'));
-if(process.env.NODE_ENV==='production')throw new Error('Test reset is disabled in production');
+require('./local-test-mode.cjs').assertLocalTestMode();
 const requireApi=createRequire(resolve(__dirname,'../apps/api/package.json'));
 const Redis=requireApi('ioredis');
 const redis=new Redis(process.env.REDIS_URL,{maxRetriesPerRequest:1,connectTimeout:5000});

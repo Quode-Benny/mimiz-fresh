@@ -1,0 +1,8 @@
+"use client";
+import {MapContainer,TileLayer,Circle,Polygon,Marker,useMapEvents} from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
+const marker=L.divIcon({className:'map-pin',html:'<span></span>',iconSize:[28,36],iconAnchor:[14,36]});
+export type ZoneShape={mode:'radius'|'polygon';center:[number,number];radius:number;points:[number,number][]};
+function Shape({value,onChange}:{value:ZoneShape;onChange:(shape:ZoneShape)=>void}){useMapEvents({click:event=>onChange(value.mode==='radius'?{...value,center:[event.latlng.lat,event.latlng.lng]}:{...value,points:[...value.points,[event.latlng.lat,event.latlng.lng] as [number,number]].slice(0,100)})});return value.mode==='radius'?<><Circle center={value.center} radius={value.radius} pathOptions={{color:'#6145ab',fillOpacity:.13}}/><Marker position={value.center} icon={marker} title="Delivery zone center" alt="Delivery zone center"/></>:<>{value.points.length>1&&<Polygon positions={value.points} pathOptions={{color:'#6145ab',fillOpacity:.15}}/>}{value.points.map((point,index)=><Marker key={index} position={point} icon={marker} title={"Zone boundary point "+(index+1)} alt={"Zone boundary point "+(index+1)}/>)}</>;}
+export default function ZoneMap({value,onChange}:{value:ZoneShape;onChange:(shape:ZoneShape)=>void}){return <MapContainer center={value.center} zoom={12} className="pin-map zone-map"><TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'/><Shape value={value} onChange={onChange}/></MapContainer>;}

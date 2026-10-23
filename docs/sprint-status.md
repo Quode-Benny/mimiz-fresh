@@ -1,31 +1,33 @@
-# Platform status
+# Platform status - 21 October 2026
 
-## Working locally
+## Implemented locally
 
-- Next.js storefront with the Ghanaian catalogue, accessible meal customisation, vegetarian/category/search controls and Ghana-time suggestions.
-- Separate NestJS/Fastify API, PostgreSQL 16 + PostGIS, Redis, BullMQ and protected Socket.IO order signals. REST polling remains the fallback.
-- Company-owned catalogue with branch price/availability/stock overrides. Persistent server carts and optimistic-version conflict checks.
-- Customer OTP with hashed five-minute codes, attempt limits and explicit demo code; staff Argon2 login; HttpOnly access/rotating refresh sessions; refresh-family reuse detection; CSRF and origin checks; branch/role permissions.
-- Pickup and delivery checkout with required delivery pin, landmark and recipient details. PostGIS checks coverage; opening hours, closures, three-day 15-minute scheduling, minimums, promotions and server prices are enforced.
-- Transactional stock reservations, per-branch/day order numbers, snapshots, customer cancellation, append-only status history, cash completion, private history/tracking and meal ratings.
-- Signed mock gateway, duplicate delivery, decline/retry, delayed success, late success/refund, background unpaid-order expiry, persistent webhook inbox, refund recovery.
-- Staff kitchen board with sound gate/repeating alerts, availability toggles, company dish editing/creation, photo validation + responsive WebP upload, team creation/deactivation, kitchen hours/closures, radius delivery zones and promotions.
-- Rider assignment and role-scoped rider lists/actions; foreground location posting for assigned active deliveries; customer rider contact/location link.
-- Order support messages and branch support inbox, in-app notifications, owner-only Dev Inbox, basic revenue/popularity summaries.
-- Installable manifest and Serwist offline fallback/menu cache; auth, order, checkout and payment paths use network-only strategies. Service worker is enabled in production builds, disabled during development.
+- Separate customer, staff, administration and rider entrances; independent portal-bound sessions, CSRF cookies and browser query caches. Role and branch permissions are checked by the API.
+- Responsive Ghanaian storefront with fourteen illustrative dishes, meal choices, dietary/allergen tags, typo-tolerant search, categories, sorting and explainable recommendations.
+- Multi-kitchen selection, nearest-distance display, PostGIS coverage, cart-switch confirmation, stock and current-price validation.
+- Persistent versioned carts, cash and simulated online checkout, fee/tax snapshots, promotions, valid scheduled slots, opening hours and closures.
+- Idempotent order creation and transactional last-portion reservations; signed/duplicate payment webhooks, retry, expiry, cancellation, partial refunds and late-success refunds.
+- Kitchen board, phone/walk-in cash orders, print tickets, menu/option/stock editing, dish duplication/archive, categories, company/daypart/fee settings, kitchen creation/archive, team and delivery-zone controls.
+- Assigned rider deliveries, foreground location updates and customer tracking.
+- Private support text/photos, typing, opposite-side read receipts, staff claiming, flags and retention maintenance.
+- Customer profiles, addresses, preferences, reorder and guarded account anonymisation.
+- Durable SMS/push notification deliveries, retries, templates, subscription validation and cost reports.
+- Date/branch reports, reconciliation, customer controls, CSV exports and audit viewing.
+- Staff authenticator enrolment, replay prevention, encrypted secrets and one-use recovery codes.
+- Production PWA/offline fallback, private API cache exclusion, forward SQL migrations, explicit first-owner provisioning, Docker application definitions and native data backup/isolated restore scripts.
 
 ## Verification
 
-See test commands in README. Real-service tests cover cash lifecycle, duplicate checkout, ownership/CSRF, signed and duplicate webhooks, cancellation/refund, decline/retry, late webhook/refund, PostGIS delivery and last-portion concurrency. Browser tests cover customer checkout and staff tools on 360px and 1280px. Never infer production readiness solely from these checks.
+The current unit suite passes 88 tests: 27 domain, 41 provider contracts and 20 authenticator/cryptography cases. The final compiled Docker acceptance run passed 51 cases with 21 intentional mobile duplicates skipped (72 total, no failures). Native production/PWA, empty-installation and backup/restore checks passed. Storage/account follow-up checks passed 12 cases with 6 intentional skips. Storefront/cart-readiness and four cross-tab/network-recovery regressions passed. All sixteen reviewed mobile portal screens passed automated WCAG AA checks.
 
-## Still required for the full supplied v1 definition
+Tests use a development database and create illustrative users/orders. Mobile duplicates of service-only tests are intentionally skipped. Provider transport stubs do not establish live readiness.
 
-- Complete live SMS/email/maps/storage/error adapters and shared provider contract suites; the Paystack implementation remains UNVERIFIED and needs test credentials.
-- Web push/VAPID delivery, notification preferences and complete notification retry/cost reporting.
-- Full multi-branch chooser with closest-branch resolution and cart-switch confirmation; branch creation UI; polygon zone drawing.
-- Full option-group/category/daypart management, richer search ranking/typo tolerance and recommendation impression/click logging.
-- Chat attachments, typing/read receipts, staff claiming/retention, order print layouts and staff-created telephone orders.
-- Broader reports, reconciliation/settlement CSVs, audit viewer, account anonymisation/deletion, staff 2FA, retention/backup/restore rehearsals and deployment monitoring.
-- Generated OpenAPI client coverage, Storybook, full i18n extraction, shared styling/config packages, production security/performance review and CI migration/container acceptance.
+## Still required for the entire supplied specification
 
-Do not label the entire specification complete yet. Seed branch data, prices and photos are illustrative. No real kitchen, rider business or payment processor is connected.
+- Verified merchant/sender credentials, live payment settlement/refund acceptance, real-device push acceptance and approved business data.
+- Verified live S3 migration/bucket and Sentry-project acceptance, plus deployed monitoring/alerts. Local/S3 storage, source-preserving migration, metadata-only error reporting and optional Sentry adapters are implemented.
+- Generated OpenAPI client coverage, Storybook, full i18n extraction and remaining shared configuration/schema tooling conformance.
+- Final deployment security/performance acceptance, production backup scheduling and off-site retention.
+- Owner decisions on retention/anonymisation of operational notes. Existing financial and audit history is preserved.
+
+Seed menu prices, hours, addresses and allergens are illustrative. Local functionality is substantial, but the complete v1 and live-sales deployment must not be labelled finished yet.

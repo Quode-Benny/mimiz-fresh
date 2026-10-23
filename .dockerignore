@@ -1,0 +1,16 @@
+.git
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+.env*
+.local-admin
+data
+artifacts
+playwright-report
+**/*.tsbuildinfo
+apps/web/public/sw*
+apps/web/public/swe-worker*
+
+**/.next-dev
+.provisioned-owner
